@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rule-Based System Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 p-8 font-sans">
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-md border border-gray-200">
+        <h1 class="text-2xl font-bold mb-2">Rule-Based Email Router (Demo)</h1>
+        <p class="text-gray-600 mb-6 text-sm">Type an incoming message to see how the rules evaluate it in real-time.</p>
+
+        <!-- The Rules -->
+        <div class="bg-blue-50 p-4 rounded-md mb-6 border border-blue-100">
+            <h2 class="font-bold text-blue-800 mb-2 text-sm uppercase tracking-wide">Defined Rules:</h2>
+            <ul class="text-sm font-mono text-blue-900 space-y-1">
+                <li><span class="font-bold">IF</span> text contains (<em>"refund" OR "money" OR "charge"</em>) <span class="font-bold text-green-700">➜ BILLING</span></li>
+                <li><span class="font-bold">IF</span> text contains (<em>"password" OR "login" OR "access"</em>) <span class="font-bold text-green-700">➜ TECH SUPPORT</span></li>
+                <li><span class="font-bold">IF</span> text contains (<em>"buy" OR "pricing" OR "cost"</em>) <span class="font-bold text-green-700">➜ SALES</span></li>
+                <li><span class="font-bold">DEFAULT</span> <span class="font-bold text-gray-500">➜ GENERAL INQUIRY</span></li>
+            </ul>
+        </div>
+
+        <!-- Input Area -->
+        <label class="block text-sm font-semibold mb-2">Incoming Message:</label>
+        <textarea id="inputText" class="w-full border border-gray-300 rounded-md p-3 mb-4 focus:ring-2 focus:ring-blue-500 focus:outline-none" rows="3" placeholder="Try typing: 'I forgot my password' or 'I need a refund'..."></textarea>
+
+        <!-- Output Area -->
+        <div class="bg-gray-100 p-4 rounded-md flex items-center justify-between">
+            <span class="font-semibold text-gray-700">Classification Result:</span>
+            <span id="resultBadge" class="bg-gray-300 text-gray-800 font-bold py-1 px-3 rounded-full text-sm">GENERAL INQUIRY</span>
+        </div>
+        
+        <div class="mt-4 text-xs text-gray-500" id="explanation"></div>
+    </div>
+
+    <script>
+        const input = document.getElementById('inputText');
+        const badge = document.getElementById('resultBadge');
+        const explanation = document.getElementById('explanation');
+
+        // This is the actual Rule-Based Engine
+        function classifyText(text) {
+            const lowerText = text.toLowerCase();
+
+            // Rule 1: Billing
+            if (lowerText.includes('refund') || lowerText.includes('money') || lowerText.includes('charge')) {
+                return { category: 'BILLING', color: 'bg-red-100 text-red-800', reason: 'Matched billing keywords: refund, money, or charge.' };
+            }
+            
+            // Rule 2: Tech Support
+            if (lowerText.includes('password') || lowerText.includes('login') || lowerText.includes('access')) {
+                return { category: 'TECH SUPPORT', color: 'bg-purple-100 text-purple-800', reason: 'Matched tech support keywords: password, login, or access.' };
+            }
+
+            // Rule 3: Sales
+            if (lowerText.includes('buy') || lowerText.includes('pricing') || lowerText.includes('cost')) {
+                return { category: 'SALES', color: 'bg-green-100 text-green-800', reason: 'Matched sales keywords: buy, pricing, or cost.' };
+            }
+
+            // Default
+            return { category: 'GENERAL INQUIRY', color: 'bg-gray-200 text-gray-800', reason: 'No specific keywords matched. Falling back to default category.' };
+        }
+
+        // Event Listener to run rules on every keystroke
+        input.addEventListener('input', (e) => {
+            const text = e.target.value;
+            if (text.trim() === '') {
+                badge.textContent = 'WAITING FOR INPUT';
+                badge.className = 'bg-gray-200 text-gray-800 font-bold py-1 px-3 rounded-full text-sm';
+                explanation.textContent = '';
+                return;
+            }
+
+            const result = classifyText(text);
+            badge.textContent = result.category;
+            badge.className = `${result.color} font-bold py-1 px-3 rounded-full text-sm transition-colors duration-200`;
+            explanation.textContent = `System Logic: ${result.reason}`;
+        });
+    </script>
+</body>
+</html>

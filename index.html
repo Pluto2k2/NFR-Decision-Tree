@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFR Classification Decision Framework</title>
+<meta name="description" content="Interactive decision framework for selecting AI classification architectures for Non-Functional Requirements">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body { font-family: 'Inter', system-ui, sans-serif; background: #f8f9fa; color: #1a1a1a; }
+.section-box { background: #fff; border: 1px solid #dee2e6; border-radius: 8px; }
+.radio-btn {
+  padding: 6px 14px; border-radius: 6px; cursor: pointer; transition: all 0.2s;
+  background: #fff; border: 1.5px solid #ced4da; font-size: 13px; font-weight: 500;
+  color: #495057; user-select: none; text-align: center;
+}
+.radio-btn:hover { border-color: #868e96; }
+.radio-btn.active { background: #228be6; border-color: #228be6; color: #fff; }
+.card { background: #fff; border: 1.5px solid #dee2e6; border-radius: 8px; transition: all 0.35s ease; }
+.card-recommended { border-color: #2b8a3e; background: #ebfbee; }
+.card-viable { border-color: #dee2e6; background: #fff; }
+.card-warning { border-color: #e67700; background: #fff9db; }
+.card-eliminated { border-color: #dee2e6; background: #f1f3f5; opacity: 0.5; }
+.card-eliminated .card-title { text-decoration: line-through; color: #868e96; }
+.badge { padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+.badge-recommended { background: #2b8a3e; color: #fff; }
+.badge-viable { background: #868e96; color: #fff; }
+.badge-warning { background: #e67700; color: #fff; }
+.badge-eliminated { background: #adb5bd; color: #fff; }
+.rationale { font-size: 12px; padding: 4px 8px; border-radius: 4px; line-height: 1.4; background: #f8f9fa; border: 1px solid #e9ecef; color: #495057; }
+.fade-enter-active, .fade-leave-active { transition: all 0.3s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(4px); }
+.lang-btn { padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 1.5px solid #ced4da; background: #fff; color: #495057; }
+.lang-btn.active { background: #228be6; border-color: #228be6; color: #fff; }
+.lang-btn:hover { border-color: #868e96; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="py-5 px-6 border-b flex items-center justify-between" style="background:#fff;border-color:#dee2e6">
+    <div class="text-center flex-1">
+      <h1 class="text-2xl font-bold" style="color:#1a1a1a">{{ t.title }}</h1>
+      <p class="text-sm mt-1" style="color:#868e96">{{ t.subtitle }}</p>
+    </div>
+    <div class="flex gap-1 ml-4 shrink-0">
+      <div class="lang-btn" :class="{active:lang==='en'}" @click="lang='en'">EN</div>
+      <div class="lang-btn" :class="{active:lang==='fr'}" @click="lang='fr'">FR</div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-6">
+    <!-- CONSTRAINTS -->
+    <section class="section-box p-5 mb-5">
+      <h2 class="text-sm font-semibold mb-4" style="color:#495057;letter-spacing:0.3px">{{ t.constraintsTitle }}</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div v-for="c in constraintDefs" :key="c.key" class="p-3 rounded-lg" style="background:#f8f9fa">
+          <div class="mb-2">
+            <div class="text-xs font-semibold" style="color:#1a1a1a">{{ c.label }}</div>
+            <div class="text-xs" style="color:#868e96">{{ c.hint }}</div>
+          </div>
+          <div :class="c.options.length>2?'grid grid-cols-2 gap-2':'flex gap-2'">
+            <div v-for="o in c.options" :key="o.value"
+                 class="radio-btn" :class="[{active:state[c.key]===o.value}, c.options.length<=3?'flex-1':'']"
+                 @click="state[c.key]=o.value">{{ o.label }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="mt-4 text-center">
+        <button @click="resetState" class="text-xs px-3 py-1.5 rounded border transition-colors hover:bg-gray-100" style="color:#868e96;border-color:#ced4da">↺ {{ t.reset }}</button>
+      </div>
+    </section>
+
+    <!-- PARADIGMS -->
+    <section class="mb-5">
+      <div class="flex items-center justify-between mb-3 px-1">
+        <h2 class="text-sm font-semibold" style="color:#495057;letter-spacing:0.3px">{{ t.paradigmsTitle }}</h2>
+        <span class="text-xs" style="color:#868e96">{{ viableCount }} {{ t.ofFourViable }}</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div v-for="p in paradigms" :key="p.id" class="card p-4" :class="'card-'+p.status">
+          <div class="flex items-start justify-between mb-2">
+            <h3 class="card-title text-sm font-bold" style="color:#1a1a1a">{{ p.name }}</h3>
+            <span class="badge" :class="'badge-'+p.status">{{ t.statuses[p.status] }}</span>
+          </div>
+          <p class="text-xs mb-3" style="color:#868e96">{{ p.desc }}</p>
+          <transition-group name="fade" tag="div" class="flex flex-col gap-1">
+            <div v-for="(r,i) in p.rationales" :key="i" class="rationale">
+              <span v-if="p.status==='eliminated'" style="color:#c92a2a">✕</span>
+              <span v-else-if="p.status==='warning'" style="color:#e67700">⚠</span>
+              <span v-else style="color:#2b8a3e">✓</span>
+              {{ r }}
+            </div>
+          </transition-group>
+          <div v-if="p.rationales.length===0" class="text-xs mt-1" style="color:#adb5bd;font-style:italic">{{ t.noConstraints }}</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SUMMARY -->
+    <section class="section-box p-4" style="border-left:3px solid #228be6">
+      <h2 class="text-xs font-semibold mb-2" style="color:#495057;letter-spacing:0.3px">{{ t.summaryTitle }}</h2>
+      <p class="text-sm leading-relaxed" style="color:#495057">{{ summary }}</p>
+    </section>
+  </main>
+</div>
+
+<script>
+const i18n = {
+  en: {
+    title: 'NFR Classification Architecture Decision Framework',
+    subtitle: 'Toggle constraints to evaluate which AI approach best fits your project requirements',
+    constraintsTitle: 'PROJECT CONSTRAINTS',
+    paradigmsTitle: 'CLASSIFICATION APPROACHES',
+    summaryTitle: 'SUMMARY',
+    reset: 'Reset All',
+    ofFourViable: '/ 4 available',
+    noConstraints: 'No constraints applied.',
+    statuses: { recommended: 'Recommended', viable: 'Available', warning: 'Warning', eliminated: 'Eliminated' },
+    constraints: {
+      sovereignty: { label: 'Data Sovereignty', hint: 'Must data remain on-premise (no cloud APIs)?', options: [{ value: 'No', label: 'No' }, { value: 'Yes', label: 'Yes' }] },
+      criticality: { label: 'Criticality', hint: 'Are deterministic, certifiable outputs required?', options: [{ value: 'No', label: 'No' }, { value: 'Yes', label: 'Yes' }] },
+      data: { label: 'Data Availability', hint: 'Number of labeled examples per class', options: [{ value: '>=1000', label: '≥ 1000' }, { value: '100-1000', label: '100–1000' }, { value: '10-100', label: '10–100' }, { value: '<10', label: '< 10' }] },
+      stability: { label: 'Taxonomy Stability', hint: 'How often do classification categories change?', options: [{ value: 'Stable', label: 'Stable' }, { value: 'Moderate', label: 'Moderate' }, { value: 'Volatile', label: 'Volatile' }] },
+      interpretability: { label: 'Interpretability', hint: 'Is audit-grade explainability required?', options: [{ value: 'Moderate/None', label: 'Moderate / None' }, { value: 'Strong', label: 'Strong' }] },
+      latency: { label: 'Latency', hint: 'Are there strict response time constraints?', options: [{ value: 'Standard', label: 'Standard' }, { value: 'High & Tight', label: 'High & Tight' }] },
+    },
+    paradigmDefs: [
+      { id: 'rule', name: 'Rule-based', desc: 'Handcrafted keyword and regex pattern matching' },
+      { id: 'ml', name: 'Classical ML', desc: 'Supervised models (SVM, Random Forest) trained on labeled data' },
+      { id: 'dl', name: 'Deep Learning', desc: 'Fine-tuned Transformers (BERT, RoBERTa) learning from data' },
+      { id: 'llm', name: 'LLM-based', desc: 'Few-shot / zero-shot classification via large language models' },
+    ],
+    rationales: {
+      sov_warn: 'Requires on-premise deployment; cloud-based APIs are prohibited.',
+      crit_elim: 'Non-deterministic outputs prevent formal certification.',
+      crit_rule_rec: 'Deterministic behavior allows formal certification.',
+      data_lt10_dl: 'Not enough labeled data to train a deep neural network.',
+      data_lt10_ml: 'Not enough labeled data to fit a supervised ML model.',
+      data_lt10_llm: 'Works with few or zero examples via prompting.',
+      data_lt10_rule: 'No training data needed — relies on handwritten rules.',
+      data_low_dl: 'Too few examples for a Transformer to converge properly.',
+      interp_elim: 'Black-box model — cannot provide audit-grade explanations.',
+      interp_rule_rec: 'Fully transparent: every decision traces back to an explicit rule.',
+      interp_ml_rec: 'Explainable via feature importance (SHAP, LIME).',
+      lat_llm_elim: 'Token generation latency exceeds tight response time budgets.',
+      lat_dl_warn: 'Inference may be slow without GPU acceleration.',
+      vol_retrain: 'Requires costly retraining when categories evolve.',
+      vol_llm_rec: 'Adapts to new categories by updating the prompt — no retraining.',
+    },
+    summaryFn: (rec, warn, elim, viable, constraints) => {
+      if (elim.length === 0 && rec.length === 0 && warn.length === 0)
+        return 'All four approaches are viable. Toggle the constraints above to narrow down the best fit.';
+      let parts = [];
+      if (constraints.length > 0) parts.push('Given ' + constraints.join(', ') + ':');
+      if (rec.length > 0) parts.push(rec.join(' and ') + (rec.length === 1 ? ' is recommended.' : ' are recommended.'));
+      if (warn.length > 0) parts.push(warn.join(' and ') + (warn.length === 1 ? ' remains viable with caveats.' : ' remain viable with caveats.'));
+      if (elim.length > 0) parts.push(elim.join(' and ') + (elim.length === 1 ? ' is eliminated.' : ' are eliminated.'));
+      if (rec.length === 0 && viable.length > 0 && elim.length > 0) parts.push(viable.join(' and ') + ' should be evaluated further.');
+      if (elim.length === 4) return 'All approaches are eliminated under current constraints. Relax some settings to find a viable option.';
+      if (rec.length === 1 && elim.length === 3) parts.push('This is the only viable approach under these constraints.');
+      return parts.join(' ');
+    },
+    constraintLabels: {
+      sovereignty: 'data sovereignty requirements',
+      criticality: 'certification-grade criticality',
+      dataLt10: 'very few labeled examples (< 10)',
+      data10_100: 'limited labeled data (10–100 examples)',
+      data100_1000: 'moderate labeled data (100–1000 examples)',
+      interpretability: 'strict explainability requirements',
+      latency: 'tight latency constraints',
+      stability: 'volatile category taxonomy',
+    },
+  },
+  fr: {
+    title: 'Classification des ENF Cadre de Décision Architecturale',
+    subtitle: 'Modifiez les contraintes pour évaluer quelle approche IA convient le mieux à votre projet',
+    constraintsTitle: 'CONTRAINTES DU PROJET',
+    paradigmsTitle: 'APPROCHES DE CLASSIFICATION',
+    summaryTitle: 'SYNTHÈSE',
+    reset: 'Réinitialiser',
+    ofFourViable: '/ 4 disponibles',
+    noConstraints: 'Aucune contrainte appliquée.',
+    statuses: { recommended: 'Recommandé', viable: 'Disponible', warning: 'Attention', eliminated: 'Éliminé' },
+    constraints: {
+      sovereignty: { label: 'Souveraineté des Données', hint: 'Les données doivent-elles rester sur site (pas de cloud) ?', options: [{ value: 'No', label: 'Non' }, { value: 'Yes', label: 'Oui' }] },
+      criticality: { label: 'Criticité', hint: 'Des résultats déterministes et certifiables sont-ils requis ?', options: [{ value: 'No', label: 'Non' }, { value: 'Yes', label: 'Oui' }] },
+      data: { label: 'Données Disponibles', hint: "Nombre d'exemples labellisés par classe", options: [{ value: '>=1000', label: '≥ 1000' }, { value: '100-1000', label: '100–1000' }, { value: '10-100', label: '10–100' }, { value: '<10', label: '< 10' }] },
+      stability: { label: 'Stabilité Taxonomique', hint: 'À quelle fréquence les catégories changent-elles ?', options: [{ value: 'Stable', label: 'Stable' }, { value: 'Moderate', label: 'Modérée' }, { value: 'Volatile', label: 'Volatile' }] },
+      interpretability: { label: 'Interprétabilité', hint: "Une explicabilité de niveau audit est-elle requise ?", options: [{ value: 'Moderate/None', label: 'Modérée / Aucune' }, { value: 'Strong', label: 'Forte' }] },
+      latency: { label: 'Latence', hint: 'Y a-t-il des contraintes strictes de temps de réponse ?', options: [{ value: 'Standard', label: 'Standard' }, { value: 'High & Tight', label: 'Élevée' }] },
+    },
+    paradigmDefs: [
+      { id: 'rule', name: 'À base de Règles', desc: 'Correspondance par mots-clés et expressions régulières' },
+      { id: 'ml', name: 'ML Classique', desc: 'Modèles supervisés (SVM, Random Forest) entraînés sur données labellisées' },
+      { id: 'dl', name: 'Deep Learning', desc: 'Transformers fine-tunés (BERT, RoBERTa) apprenant à partir des données' },
+      { id: 'llm', name: 'Basé sur LLM', desc: 'Classification few-shot / zero-shot via grands modèles de langage' },
+    ],
+    rationales: {
+      sov_warn: 'Nécessite un déploiement sur site ; les API cloud sont interdites.',
+      crit_elim: 'Les sorties non-déterministes empêchent la certification formelle.',
+      crit_rule_rec: 'Le comportement déterministe permet la certification formelle.',
+      data_lt10_dl: "Pas assez de données labellisées pour entraîner un réseau profond.",
+      data_lt10_ml: "Pas assez de données labellisées pour un modèle ML supervisé.",
+      data_lt10_llm: 'Fonctionne avec peu ou aucun exemple grâce au prompting.',
+      data_lt10_rule: "Aucune donnée d'entraînement nécessaire — utilise des règles manuelles.",
+      data_low_dl: "Trop peu d'exemples pour la convergence d'un Transformer.",
+      interp_elim: "Modèle boîte noire — ne peut fournir d'explications auditables.",
+      interp_rule_rec: 'Totalement transparent : chaque décision est traçable vers une règle.',
+      interp_ml_rec: "Explicable via l'importance des features (SHAP, LIME).",
+      lat_llm_elim: 'La latence de génération dépasse les contraintes de temps de réponse.',
+      lat_dl_warn: "L'inférence peut être lente sans accélération GPU.",
+      vol_retrain: 'Nécessite un ré-entraînement coûteux quand les catégories évoluent.',
+      vol_llm_rec: "S'adapte aux nouvelles catégories en modifiant le prompt — sans ré-entraînement.",
+    },
+    summaryFn: (rec, warn, elim, viable, constraints) => {
+      if (elim.length === 0 && rec.length === 0 && warn.length === 0)
+        return 'Les quatre approches sont viables. Modifiez les contraintes ci-dessus pour affiner le choix.';
+      let parts = [];
+      if (constraints.length > 0) parts.push('Étant donné ' + constraints.join(', ') + ' :');
+      if (rec.length > 0) parts.push(rec.join(' et ') + (rec.length === 1 ? ' est recommandé.' : ' sont recommandés.'));
+      if (warn.length > 0) parts.push(warn.join(' et ') + (warn.length === 1 ? ' reste viable avec des réserves.' : ' restent viables avec des réserves.'));
+      if (elim.length > 0) parts.push(elim.join(' et ') + (elim.length === 1 ? ' est éliminé.' : ' sont éliminés.'));
+      if (rec.length === 0 && viable.length > 0 && elim.length > 0) parts.push(viable.join(' et ') + ' devraient être évalués plus en détail.');
+      if (elim.length === 4) return 'Toutes les approches sont éliminées avec ces contraintes. Assouplissez certains paramètres.';
+      if (rec.length === 1 && elim.length === 3) parts.push("C'est la seule approche viable sous ces contraintes.");
+      return parts.join(' ');
+    },
+    constraintLabels: {
+      sovereignty: 'la souveraineté des données',
+      criticality: 'la criticité certifiable',
+      dataLt10: "très peu d'exemples labellisés (< 10)",
+      data10_100: 'un volume limité de données (10–100 exemples)',
+      data100_1000: 'un volume modéré de données (100–1000 exemples)',
+      interpretability: "des exigences strictes d'explicabilité",
+      latency: 'des contraintes de latence strictes',
+      stability: 'une taxonomie de catégories volatile',
+    },
+  }
+};
+
+const { createApp, reactive, computed, ref } = Vue;
+createApp({
+  setup() {
+    const lang = ref('en');
+    const t = computed(() => i18n[lang.value]);
+
+    const state = reactive({
+      sovereignty: 'No', criticality: 'No', data: '>=1000',
+      stability: 'Stable', interpretability: 'Moderate/None', latency: 'Standard'
+    });
+    const resetState = () => {
+      state.sovereignty = 'No'; state.criticality = 'No'; state.data = '>=1000';
+      state.stability = 'Stable'; state.interpretability = 'Moderate/None'; state.latency = 'Standard';
+    };
+
+    const constraintKeys = ['sovereignty', 'criticality', 'data', 'stability', 'interpretability', 'latency'];
+    const constraintDefs = computed(() =>
+      constraintKeys.map(k => ({ key: k, ...t.value.constraints[k] }))
+    );
+
+    const paradigms = computed(() => {
+      const r = t.value.rationales;
+      const defs = t.value.paradigmDefs;
+      const p = defs.map(d => ({ ...d, status: 'viable', rationales: [] }));
+      const find = id => p.find(x => x.id === id);
+      const setStatus = (item, s, rat) => {
+        const pri = { eliminated: 3, warning: 2, recommended: 1, viable: 0 };
+        if (rat) item.rationales.push(rat);
+        if (pri[s] > pri[item.status]) item.status = s;
+        else if (s === 'recommended' && item.status === 'viable') item.status = s;
+      };
+
+      if (state.sovereignty === 'Yes') {
+        setStatus(find('dl'), 'warning', r.sov_warn);
+        setStatus(find('llm'), 'warning', r.sov_warn);
+      }
+      if (state.criticality === 'Yes') {
+        setStatus(find('dl'), 'eliminated', r.crit_elim);
+        setStatus(find('llm'), 'eliminated', r.crit_elim);
+        setStatus(find('rule'), 'recommended', r.crit_rule_rec);
+      }
+      if (state.data === '<10') {
+        setStatus(find('dl'), 'eliminated', r.data_lt10_dl);
+        setStatus(find('ml'), 'eliminated', r.data_lt10_ml);
+        setStatus(find('llm'), 'recommended', r.data_lt10_llm);
+        setStatus(find('rule'), 'recommended', r.data_lt10_rule);
+      }
+      if (state.data === '10-100') {
+        setStatus(find('dl'), 'eliminated', r.data_low_dl);
+      }
+      if (state.interpretability === 'Strong') {
+        setStatus(find('dl'), 'eliminated', r.interp_elim);
+        setStatus(find('llm'), 'eliminated', r.interp_elim);
+        setStatus(find('rule'), 'recommended', r.interp_rule_rec);
+        setStatus(find('ml'), 'recommended', r.interp_ml_rec);
+      }
+      if (state.latency === 'High & Tight') {
+        setStatus(find('llm'), 'eliminated', r.lat_llm_elim);
+        setStatus(find('dl'), 'warning', r.lat_dl_warn);
+      }
+      if (state.stability === 'Volatile') {
+        setStatus(find('ml'), 'warning', r.vol_retrain);
+        setStatus(find('dl'), 'warning', r.vol_retrain);
+        if (find('llm').status !== 'eliminated') {
+          setStatus(find('llm'), 'recommended', r.vol_llm_rec);
+        }
+      }
+      return p;
+    });
+
+    const viableCount = computed(() => paradigms.value.filter(p => p.status !== 'eliminated').length);
+
+    const summary = computed(() => {
+      const rec = paradigms.value.filter(p => p.status === 'recommended').map(p => p.name);
+      const warn = paradigms.value.filter(p => p.status === 'warning').map(p => p.name);
+      const elim = paradigms.value.filter(p => p.status === 'eliminated').map(p => p.name);
+      const viable = paradigms.value.filter(p => p.status === 'viable').map(p => p.name);
+      const cl = t.value.constraintLabels;
+      const constraints = [];
+      if (state.sovereignty === 'Yes') constraints.push(cl.sovereignty);
+      if (state.criticality === 'Yes') constraints.push(cl.criticality);
+      if (state.data === '<10') constraints.push(cl.dataLt10);
+      else if (state.data === '10-100') constraints.push(cl.data10_100);
+      else if (state.data === '100-1000') constraints.push(cl.data100_1000);
+      if (state.interpretability === 'Strong') constraints.push(cl.interpretability);
+      if (state.latency === 'High & Tight') constraints.push(cl.latency);
+      if (state.stability === 'Volatile') constraints.push(cl.stability);
+      return t.value.summaryFn(rec, warn, elim, viable, constraints);
+    });
+
+    return { lang, t, state, constraintDefs, paradigms, viableCount, summary, resetState };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
